@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sana küçük bir sahil 🌅</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1d1a3a">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Sahil">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#1d1a3a;--ink:#fff4e0;--pink:#ff7aa8;--gold:#ffd27a}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;height:100dvh;background:var(--bg);color:var(--ink);font-family:'Press Start 2P',ui-monospace,Menlo,monospace}
+body{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:max(12px,env(safe-area-inset-top)) 10px max(12px,env(safe-area-inset-bottom));overflow:hidden}
+h1{font-size:clamp(11px,3.2vw,18px);margin:0;text-align:center;line-height:1.6;color:var(--gold)}
+#wrap{width:min(100%,calc((100dvh - 190px)*16/9),900px);border:4px solid #0d0b22;box-shadow:0 0 0 4px #4b3f8f,0 12px 0 #0d0b22;touch-action:manipulation}
+canvas{display:block;width:100%;image-rendering:pixelated;cursor:pointer}
+#msg{min-height:3.2em;font-size:clamp(8px,2.4vw,12px);line-height:1.8;text-align:center;max-width:620px;padding:0 8px}
+button{font:inherit;font-size:clamp(8px,2.4vw,11px);background:var(--pink);color:#3a0f26;border:0;padding:12px 16px;box-shadow:0 4px 0 #a8305f;cursor:pointer}
+button:active{transform:translateY(3px);box-shadow:0 1px 0 #a8305f}
+button:focus-visible{outline:3px solid var(--gold);outline-offset:3px}
+#letter{position:fixed;inset:0;background:rgba(10,8,30,.82);display:none;align-items:center;justify-content:center;padding:18px}
+#letter.on{display:flex}
+#paper{background:#fff0d6;color:#4a2a3a;max-width:520px;max-height:84vh;overflow:auto;padding:22px;border:4px solid #0d0b22;box-shadow:0 0 0 4px var(--pink);font-size:clamp(8px,2.5vw,11px);line-height:2.1}
+#paper p{margin:0 0 14px}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto}}
+</style>
+</head>
+<body>
+<h1 id="title"></h1>
+<div id="wrap"><canvas id="c" aria-label="Sahilde gün batımını izleyen iki piksel karakter"></canvas></div>
+<div id="msg" aria-live="polite"></div>
+<button id="open">💌 Mektubu aç</button>
+
+<div id="letter" role="dialog" aria-modal="true">
+  <div id="paper">
+    <div id="text"></div>
+    <button id="close">Kapat</button>
+  </div>
+</div>
+
+<script>
+/* ====== BURAYI KENDİNE GÖRE DEĞİŞTİR ====== */
+const ISIM = "Aşkım";               // ona seslenişin
+const BASLIK = "Sana küçük bir sahil";
+const MEKTUP = [
+  "Bazen dünya çok hızlı akıyor ama yanındayken her şey yavaşlıyor, tıpkı gün batımı gibi.",
+  "Seninle geçen her sıradan an, bana en güzel manzaradan bile daha çok şey veriyor.",
+  "Bu küçük sahili sadece ikimiz için yaptım. Umarım gülümsetmiştir.",
+  "İyi ki varsın. 💗"
+];
+const MESAJLAR = {
+  giris:[`${ISIM}, bu sahil sadece ikimizin 🌅`, "Güneşe, kuşlara ve bize dokunabilirsin"],
+  kuslar:["cik cik! Sana selam söylediler 🐦","Kuşlar da seni seviyor 🐦","Uçup gitmediler, sadece havalandılar 🐦"],
+  biz:["Elele tutuşmaktan hiç sıkılmayız 💞","Sarılma zamanı 🤗","Hep böyle yan yana 💗"],
+  deniz:["Denizin sesi seni çağırıyor 🌊","Dalgalar sana göz kırptı ✨"],
+  gunes:["Güneş batıyor ama biz buradayız 🌇","Gökyüzü bu kez pembe oldu 💗","Yıldızlar çıktı, iyi geceler 🌙","Yeni bir gün doğdu ☀️"]
+};
+/* ========================================= */
+
+document.getElementById('title').textContent = BASLIK;
+const W=160,H=90,HOR=46,SEA_END=64;
+const cv=document.getElementById('c'),x=cv.getContext('2d');
+cv.width=W;cv.height=H;
+const msgEl=document.getElementById('msg');
+const say=t=>msgEl.textContent=t;
+const pick=a=>a[Math.floor(Math.random()*a.length)];
+say(MESAJLAR.giris[0]);
+
+const hex=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
+const mix=(A,B,t)=>A.map((v,i)=>Math.round(v+(B[i]-v)*t));
+const css=a=>`rgb(${a[0]},${a[1]},${a[2]})`;
+const grad=(S,t)=>{const n=S.length-1,p=Math.min(Math.max(t,0),.999)*n,i=Math.floor(p);return mix(S[i],S[i+1],p-i)};
+const TOP=['#74c0ee','#5a3f9a','#14153f'].map(hex);
+const HZN=['#ffe0a0','#ff7f6b','#a8407a'].map(hex);
+const SEA=['#3aa3cf','#31508f','#121a45'].map(hex);
+const SAND=['#f3d9a0','#d9a07a','#5a4a6a'].map(hex);
+const R=(a,b,w,h,c)=>{x.fillStyle=c;x.fillRect(Math.round(a),Math.round(b),w,h)};
+
+/* sprite'lar */
+const GIRL=[
+"..bbbbb..",
+".bbbbbbb.",
+"bbsssssbb",
+"bbsksksbb",
+"bbpssspbb",
+".bbsssbb.",
+"bwwwwwwwb",
+"wwwwwwwww",
+"wswwwwwsw",
+".wwwwwww.",
+".ddd.ddd.",
+".ddd.ddd."];
+const BOY=[
+".h.hhhh..",
+".hhhhhhh.",
+".hsssssh.",
+".hsksksh.",
+"..sssss..",
+"..sssss..",
+".ggggggg.",
+"ggggggggg",
+"gsgggggsg",
+".ggggggg.",
+".ddd.ddd.",
+".ddd.ddd."];
+const GC={b:'#6b3f2e',s:'#f2c3a2',k:'#2a1a1a',p:'#ff9aa8',w:'#fff6ea',d:'#4a4e69'};
+const BC={h:'#1c1416',s:'#d9a47f',k:'#1c1416',g:'#5d6b4a',d:'#34384f'};
+const HEART=[".#.#.","#####","#####",".###.","..#.."];
+function spr(rows,px,py,map){rows.forEach((r,j)=>[...r].forEach((ch,i)=>{if(map[ch])R(px+i,py+j,1,1,map[ch])}))}
+function heart(px,py,col,a=1){x.globalAlpha=a;HEART.forEach((r,j)=>[...r].forEach((ch,i)=>{if(ch=='#')R(px+i,py+j,1,1,col)}));R(px+1,py+1,1,1,'#ffd0e0');x.globalAlpha=1}
+
+/* durum */
+let f=0,t=.35,tt=.35,hug=0,hugT=0,sunTaps=0;
+const stars=Array.from({length:30},()=>({x:Math.random()*W,y:Math.random()*(HOR-8),p:Math.random()*6}));
+const clouds=[{x:20,y:12,s:.05},{x:95,y:20,s:.035},{x:140,y:8,s:.045}];
+const birds=Array.from({length:4},(_,i)=>({x:20+i*38,y:14+(i%2)*10+i*3,v:.28+i*.05,ph:i*3,boost:0}));
+const hearts=[];const sparks=[];
+const sandDots=Array.from({length:70},()=>({x:Math.random()*W,y:SEA_END+3+Math.random()*(H-SEA_END-4),c:Math.random()}));
+
+function spawnHearts(px,py,n){for(let i=0;i<n;i++)hearts.push({x:px+(Math.random()-.5)*14,y:py,vy:.25+Math.random()*.3,life:70+Math.random()*30,w:Math.random()*6})}
+
+/* ses (küçük bip) */
+let ac;function beep(fq,d=.09){try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();const o=ac.createOscillator(),g=ac.createGain();o.type='square';o.frequency.value=fq;g.gain.value=.04;o.connect(g);g.connect(ac.destination);o.start();o.stop(ac.currentTime+d)}catch(e){}}
+
+function sunPos(){return{x:80,y:22+t*30}}
+
+function draw(){
+  f++;
+  t+=(tt-t)*.03; hug+=(hugT-hug)*.06;
+  /* gökyüzü */
+  const top=grad(TOP,t),hz=grad(HZN,t);
+  for(let y=0;y<HOR;y+=3){R(0,y,W,3,css(mix(top,hz,Math.pow(Math.round(y/HOR*7)/7,1.3))))}
+  /* yıldızlar */
+  const sa=Math.max(0,(t-.55)/.45);
+  if(sa>0)stars.forEach(s=>{x.globalAlpha=sa*(.5+.5*Math.sin(f/20+s.p));R(s.x,s.y,1,1,'#fff6d0')});x.globalAlpha=1;
+  /* güneş */
+  const sp=sunPos(),sc=css(mix(hex('#fff3b0'),hex('#ff9a6a'),Math.min(1,t*1.2)));
+  [[13,.12],[10,.2]].forEach(([r,a])=>{x.globalAlpha=a;for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++)if(dx*dx+dy*dy<=r*r)R(sp.x+dx,sp.y+dy,1,1,sc)});x.globalAlpha=1;
+  for(let dy=-7;dy<=7;dy++)for(let dx=-7;dx<=7;dx++)if(dx*dx+dy*dy<=49)R(sp.x+dx,sp.y+dy,1,1,sc);
+  /* bulutlar */
+  const cc=css(mix(hex('#ffffff'),hz,.45+t*.3));
+  clouds.forEach(c=>{c.x+=c.s;if(c.x>W+20)c.x=-24;R(c.x,c.y,14,2,cc);R(c.x+3,c.y-2,8,2,cc);R(c.x-3,c.y+2,18,1,cc)});
+  /* kuşlar */
+  birds.forEach(b=>{
+    b.x+=b.v*(1+b.boost/15);if(b.boost>0)b.boost--;if(b.x>W+6)b.x=-6;
+    const by=b.y+Math.sin(f/18+b.ph)*2-(b.boost>0?Math.sin(b.boost/8)*3:0),fr=Math.floor(f/8+b.ph)%2,col=t>.6?'#0b0a24':'#3a2748';
+    b.cy=by;
+    if(fr){R(b.x-2,by-1,1,1,col);R(b.x-1,by,1,1,col);R(b.x,by,1,1,col);R(b.x+1,by,1,1,col);R(b.x+2,by-1,1,1,col)}
+    else{R(b.x-2,by,1,1,col);R(b.x-1,by-1,1,1,col);R(b.x,by,1,1,col);R(b.x+1,by-1,1,1,col);R(b.x+2,by,1,1,col)}
+  });
+  /* deniz */
+  const sea=grad(SEA,t);
+  for(let y=HOR;y<SEA_END;y++){const d=(y-HOR)/(SEA_END-HOR);R(0,y,W,1,css(mix(mix(sea,hz,.35*(1-d)),[0,0,30],d*.25)))}
+  if(sp.y<HOR+2){for(let y=HOR+1;y<SEA_END-1;y+=2){const d=y-HOR,w=Math.max(2,Math.round(3+d*.5+Math.sin(f/10+y)*2));x.globalAlpha=.55;R(sp.x-w/2+Math.sin(f/14+y)*1.5,y,w,1,sc);x.globalAlpha=1}}
+  for(let y=HOR+3;y<SEA_END-1;y+=3)for(let k=0;k<7;k++){const wx=((k*27+y*13+f*(.12+y*.004))%(W+10))-5;x.globalAlpha=.35;R(wx,y,3+((y+k)%3),1,'#ffffff');x.globalAlpha=1}
+  /* kum */
+  const sand=css(grad(SAND,t));
+  R(0,SEA_END,W,H-SEA_END,sand);
+  const wet=css(mix(grad(SAND,t),[40,40,80],.3));
+  R(0,SEA_END,W,3,wet);
+  sandDots.forEach(s=>R(s.x,s.y,1,1,s.c>.5?css(mix(grad(SAND,t),[255,255,255],.2)):css(mix(grad(SAND,t),[60,40,50],.25))));
+  for(let i=0;i<W;i++){const o=Math.sin(i/6+f/25)*1.2+Math.sin(i/3-f/18)*.6;if(o>.9)R(i,SEA_END-1,1,1,'#ffffff');if(o>.1)R(i,SEA_END+1,1,1,'#e9f6ff')}
+  /* karakterler */
+  const gx=64+hug*5,bx=87-hug*5,py=65;
+  x.globalAlpha=.25;R(gx,py+12,9,1,'#000');R(bx,py+12,9,1,'#000');x.globalAlpha=1;
+  const gb=Math.round(Math.sin(f/30)*.6+.4),bb=Math.round(Math.sin(f/30+1)*.6+.4);
+  spr(GIRL,gx,py-gb+1,GC);spr(BOY,bx,py-bb+1,BC);
+  if(hug>.6){R(gx+9,py+7,Math.round(bx-gx-9)+1,1,'#f2c3a2')}
+  if(hug>.5)heart(80-2,py-6+Math.round(Math.sin(f/10)),'#ff5d8f',hug);
+  /* hafif akşam ışığı */
+  x.globalAlpha=.08*t;R(0,0,W,H,'#2a1a6a');x.globalAlpha=1;
+  /* kalpler */
+  for(let i=hearts.length-1;i>=0;i--){const h=hearts[i];h.y-=h.vy;h.life--;if(h.life<=0){hearts.splice(i,1);continue}
+    heart(Math.round(h.x+Math.sin(f/8+h.w)*2),Math.round(h.y),'#ff5d8f',Math.min(1,h.life/25))}
+  for(let i=sparks.length-1;i>=0;i--){const s=sparks[i];s.life--;if(s.life<=0){sparks.splice(i,1);continue}
+    x.globalAlpha=s.life/20;R(s.x,s.y,1,1,'#fff');R(s.x-1,s.y,3,1,'#fff');R(s.x,s.y-1,1,3,'#fff');x.globalAlpha=1}
+  requestAnimationFrame(draw);
+}
+
+/* etkileşim */
+cv.addEventListener('pointerdown',e=>{
+  const r=cv.getBoundingClientRect(),lx=(e.clientX-r.left)/r.width*W,ly=(e.clientY-r.top)/r.height*H;
+  const sp=sunPos();
+  const bird=birds.find(b=>Math.hypot(b.x-lx,(b.cy||b.y)-ly)<9);
+  if(bird){bird.boost=60;spawnHearts(bird.x,bird.cy||bird.y,2);beep(1200,.05);setTimeout(()=>beep(1500,.05),70);say(pick(MESAJLAR.kuslar));return}
+  if(lx>58&&lx<102&&ly>58&&ly<80){hugT=hugT?0:1;spawnHearts(80,62,hugT?9:3);beep(hugT?660:520);say(pick(MESAJLAR.biz));return}
+  if(Math.hypot(sp.x-lx,sp.y-ly)<11||ly<HOR-18&&Math.abs(lx-sp.x)<10){sunTaps=(sunTaps+1)%4;tt=[.35,.7,1,0][sunTaps];beep(440+sunTaps*110);say(MESAJLAR.gunes[sunTaps]);return}
+  if(ly>=HOR&&ly<SEA_END){for(let i=0;i<4;i++)sparks.push({x:lx+(Math.random()-.5)*16,y:ly+(Math.random()-.5)*5,life:20+Math.random()*10});beep(300,.12);say(pick(MESAJLAR.deniz));return}
+  spawnHearts(lx,ly,3);beep(880,.06);say(`${ISIM}, seni seviyorum 💗`);
+});
+
+/* mektup */
+const L=document.getElementById('letter');
+document.getElementById('text').innerHTML=`<p>${ISIM},</p>`+MEKTUP.map(p=>`<p>${p}</p>`).join('');
+document.getElementById('open').onclick=()=>{L.classList.add('on');spawnHearts(80,50,12)};
+document.getElementById('close').onclick=()=>L.classList.remove('on');
+L.addEventListener('click',e=>{if(e.target===L)L.classList.remove('on')});
+addEventListener('keydown',e=>{if(e.key==='Escape')L.classList.remove('on')});
+
+draw();
+if('serviceWorker' in navigator){addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}))}
+</script>
+</body>
+</html>
